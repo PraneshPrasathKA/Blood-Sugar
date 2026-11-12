@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -13,6 +13,8 @@ import {
   useReadings,
   useUpdateReading,
 } from '@/hooks/useReadings';
+import { useToast } from '@/hooks/useToast';
+import { getTodayDateString } from '@/lib/dates';
 import { ApiError } from '@/services/api';
 import { Reading, TimeSlot } from '@/types';
 import { ReadingForm } from './ReadingForm';
@@ -32,11 +34,25 @@ export function ReadingFormDialog({
   defaultDate,
   onSuccess,
 }: ReadingFormDialogProps) {
+  const toast = useToast();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [activeDate, setActiveDate] = useState(
+    editingReading?.reading_date ?? defaultDate ?? getTodayDateString()
+  );
+
+  useEffect(() => {
+    setActiveDate(
+      editingReading?.reading_date ?? defaultDate ?? getTodayDateString()
+    );
+  }, [editingReading, defaultDate, open]);
+
   const createMutation = useCreateReading();
   const updateMutation = useUpdateReading();
 
-  const { data: recentData } = useReadings({ page: 1, limit: 50 });
+  const { data: dateReadingsData } = useReadings({
+    date: activeDate,
+    limit: 10,
+  });
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
@@ -57,17 +73,24 @@ export function ReadingFormDialog({
           id: editingReading.id,
           input: values,
         });
-        onSuccess?.('Reading updated successfully.');
+        const msg = 'Reading updated successfully.';
+        toast.success(msg);
+        onSuccess?.(msg);
       } else {
         await createMutation.mutateAsync(values);
-        onSuccess?.('Reading added successfully.');
+        const msg = 'Reading added successfully.';
+        toast.success(msg);
+        onSuccess?.(msg);
       }
       handleOpenChange(false);
     } catch (error) {
       if (error instanceof ApiError) {
         setServerError(error.message);
+        toast.error(error.message, 'Validation error');
       } else {
-        setServerError('Unable to save reading. Please try again.');
+        const msg = 'Unable to save reading. Please try again.';
+        setServerError(msg);
+        toast.error(msg);
       }
     }
   };
@@ -86,10 +109,11 @@ export function ReadingFormDialog({
 
         <ReadingForm
           initialReading={editingReading}
-          existingReadingsForDate={recentData?.readings ?? []}
+          existingReadingsForDate={dateReadingsData?.readings ?? []}
           defaultDate={defaultDate}
           isSubmitting={createMutation.isPending || updateMutation.isPending}
           serverError={serverError}
+          onDateChange={setActiveDate}
           onSubmit={handleSubmit}
           onCancel={() => handleOpenChange(false)}
         />
@@ -97,4 +121,3 @@ export function ReadingFormDialog({
     </Dialog>
   );
 }
-

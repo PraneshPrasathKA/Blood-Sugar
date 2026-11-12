@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -22,23 +21,25 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
   useCreateReading,
   useDeleteReading,
   useReadings,
 } from '@/hooks/useReadings';
+import { useToast } from '@/hooks/useToast';
 import { getGlucoseStatus, TIME_SLOT_LABELS } from '@/lib/constants';
 import { formatDisplayDate, getTodayDateString } from '@/lib/dates';
 import { ApiError } from '@/services/api';
 import { Reading, TimeSlot } from '@/types';
 
 export default function ReadingsPage() {
+  const toast = useToast();
   const today = getTodayDateString();
   const [page, setPage] = useState(1);
   const [dateFilter, setDateFilter] = useState('');
+  const [formDate, setFormDate] = useState(today);
   const [addError, setAddError] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [editingReading, setEditingReading] = useState<Reading | null>(null);
   const [deletingReading, setDeletingReading] = useState<Reading | null>(null);
 
@@ -48,8 +49,9 @@ export default function ReadingsPage() {
     ...(dateFilter ? { date: dateFilter } : {}),
   });
 
-  // Also fetch recent readings without date filter so slot hints work on the inline form
-  const slotContextQuery = useReadings({ page: 1, limit: 50 });
+  // Query readings for the currently active form date so slot auto-selection
+  // and already-logged badges are accurate for any chosen date.
+  const slotContextQuery = useReadings({ date: formDate, limit: 10 });
 
   const createMutation = useCreateReading();
   const deleteMutation = useDeleteReading();
@@ -63,15 +65,17 @@ export default function ReadingsPage() {
     glucose_value: number;
   }) => {
     setAddError(null);
-    setStatusMessage(null);
     try {
       await createMutation.mutateAsync(values);
-      setStatusMessage('Reading added successfully.');
+      toast.success('Reading added successfully.');
     } catch (error) {
       if (error instanceof ApiError) {
         setAddError(error.message);
+        toast.error(error.message, 'Validation error');
       } else {
-        setAddError('Unable to save reading. Please try again.');
+        const msg = 'Unable to save reading. Please try again.';
+        setAddError(msg);
+        toast.error(msg);
       }
     }
   };
@@ -79,7 +83,7 @@ export default function ReadingsPage() {
   const handleConfirmDelete = async (reading: Reading) => {
     await deleteMutation.mutateAsync(reading.id);
     setDeletingReading(null);
-    setStatusMessage('Reading deleted successfully.');
+    toast.success('Reading deleted successfully.');
   };
 
   return (
@@ -93,22 +97,6 @@ export default function ReadingsPage() {
             Add, review, update, or remove your daily blood glucose entries (up to 4 slots per day).
           </p>
         </div>
-
-        {statusMessage && (
-          <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-            <span className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              {statusMessage}
-            </span>
-            <button
-              type="button"
-              onClick={() => setStatusMessage(null)}
-              className="text-xs font-medium underline"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
 
         <div className="grid gap-6 lg:grid-cols-12">
           {/* Add Reading Form Panel */}
@@ -125,6 +113,7 @@ export default function ReadingsPage() {
                 defaultDate={dateFilter || today}
                 isSubmitting={createMutation.isPending}
                 serverError={addError}
+                onDateChange={setFormDate}
                 onSubmit={handleAddReading}
               />
             </CardContent>
@@ -142,31 +131,19 @@ export default function ReadingsPage() {
                 </CardDescription>
               </div>
 
-              <div className="flex items-center gap-2">
-                <Input
-                  type="date"
-                  max={today}
-                  value={dateFilter}
-                  aria-label="Filter by date"
-                  onChange={(e) => {
-                    setDateFilter(e.target.value);
-                    setPage(1);
-                  }}
-                  className="w-auto"
-                />
-                {dateFilter && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setDateFilter('');
-                      setPage(1);
-                    }}
-                  >
-                    Clear
-                  </Button>
-                )}
-              </div>
+              <DatePicker
+                value={dateFilter}
+                maxDate={today}
+                clearable
+                placeholder="Filter by date"
+                ariaLabel="Filter by date"
+                onChange={(nextDate) => {
+                  setDateFilter(nextDate);
+                  if (nextDate) setFormDate(nextDate);
+                  setPage(1);
+                }}
+                className="w-full sm:w-52"
+              />
             </CardHeader>
 
             <CardContent>
@@ -284,7 +261,6 @@ export default function ReadingsPage() {
         open={Boolean(editingReading)}
         onOpenChange={(open) => !open && setEditingReading(null)}
         editingReading={editingReading}
-        onSuccess={(msg) => setStatusMessage(msg)}
       />
 
       <DeleteReadingDialog
@@ -296,4 +272,3 @@ export default function ReadingsPage() {
     </AppShell>
   );
 }
-

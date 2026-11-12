@@ -1,16 +1,33 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertCircle, Loader2 } from 'lucide-react';
-import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import {
+  AlertCircle,
+  Coffee,
+  Loader2,
+  Moon,
+  Sparkles,
+  Sun,
+  Sunrise,
+} from 'lucide-react';
+import { ReactNode, useEffect } from 'react';
+import { Controller, useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
+import { CustomSelect, CustomSelectOption } from '@/components/ui/custom-select';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { TIME_SLOT_OPTIONS } from '@/lib/constants';
+import { getNextAvailableSlot, TIME_SLOT_OPTIONS } from '@/lib/constants';
 import { getTodayDateString } from '@/lib/dates';
 import { ReadingFormInput, readingFormSchema } from '@/lib/validations';
 import { Reading, TimeSlot } from '@/types';
+
+const SLOT_ICONS: Record<TimeSlot, ReactNode> = {
+  MORNING_FASTING: <Sunrise className="h-4 w-4" />,
+  AFTER_BREAKFAST: <Coffee className="h-4 w-4" />,
+  AFTER_LUNCH: <Sun className="h-4 w-4" />,
+  AFTER_DINNER: <Moon className="h-4 w-4" />,
+};
 
 interface ReadingFormProps {
   initialReading?: Reading | null;
@@ -18,6 +35,7 @@ interface ReadingFormProps {
   defaultDate?: string;
   isSubmitting?: boolean;
   serverError?: string | null;
+  onDateChange?: (date: string) => void;
   onSubmit: (values: {
     reading_date: string;
     time_slot: TimeSlot;
@@ -32,33 +50,31 @@ export function ReadingForm({
   defaultDate,
   isSubmitting = false,
   serverError,
+  onDateChange,
   onSubmit,
   onCancel,
 }: ReadingFormProps) {
   const today = getTodayDateString();
   const isEditing = Boolean(initialReading);
+  const initialDate = initialReading?.reading_date ?? defaultDate ?? today;
 
-  const usedSlotsOnInitialDate = new Set(
-    existingReadingsForDate
-      .filter((r) => r.id !== initialReading?.id)
-      .map((r) => r.time_slot)
-  );
-
-  const firstAvailableSlot =
-    TIME_SLOT_OPTIONS.find((opt) => !usedSlotsOnInitialDate.has(opt.value))
-      ?.value ?? 'MORNING_FASTING';
+  const initialSlot =
+    initialReading?.time_slot ??
+    getNextAvailableSlot(existingReadingsForDate, initialDate);
 
   const {
+    control,
     register,
     handleSubmit,
     watch,
+    setValue,
     reset,
     formState: { errors },
   } = useForm<ReadingFormInput>({
     resolver: zodResolver(readingFormSchema),
     defaultValues: {
-      reading_date: initialReading?.reading_date ?? defaultDate ?? today,
-      time_slot: initialReading?.time_slot ?? firstAvailableSlot,
+      reading_date: initialDate,
+      time_slot: initialSlot,
       glucose_value: initialReading
         ? String(initialReading.glucose_value)
         : '',
@@ -66,22 +82,63 @@ export function ReadingForm({
   });
 
   useEffect(() => {
+    const nextDate = initialReading?.reading_date ?? defaultDate ?? today;
+    const nextSlot =
+      initialReading?.time_slot ??
+      getNextAvailableSlot(existingReadingsForDate, nextDate);
     reset({
-      reading_date: initialReading?.reading_date ?? defaultDate ?? today,
-      time_slot: initialReading?.time_slot ?? firstAvailableSlot,
+      reading_date: nextDate,
+      time_slot: nextSlot,
       glucose_value: initialReading
         ? String(initialReading.glucose_value)
         : '',
     });
-  }, [initialReading, defaultDate, today, firstAvailableSlot, reset]);
+  }, [initialReading, defaultDate, today, reset]);
 
   const selectedDate = watch('reading_date');
-  const slotsTakenForSelectedDate = new Set(
-    existingReadingsForDate
-      .filter(
-        (r) => r.reading_date === selectedDate && r.id !== initialReading?.id
-      )
-      .map((r) => r.time_slot)
+  const selectedSlot = watch('time_slot');
+
+  const readingsOnSelectedDate = existingReadingsForDate.filter(
+    (r) => r.reading_date === selectedDate && r.id !== initialReading?.id
+  );
+  const readingBySlot = new Map<TimeSlot, Reading>(
+    readingsOnSelectedDate.map((r) => [r.time_slot, r])
+  );
+  const allFourLogged = !isEditing && readingBySlot.size >= 4;
+
+  // Automatically pick the next available slot after what is already logged
+  // whenever the date changes or new readings arrive for that date.
+  useEffect(() => {
+    if (isEditing) return;
+    if (readingBySlot.has(selectedSlot)) {
+      const nextSlot = getNextAvailableSlot(
+        existingReadingsForDate,
+        selectedDate,
+        initialReading?.id
+      );
+      setValue('time_slot', nextSlot, { shouldValidate: false });
+    }
+  }, [
+    isEditing,
+    selectedDate,
+    selectedSlot,
+    existingReadingsForDate,
+    initialReading?.id,
+    setValue,
+  ]);
+
+  const slotOptions: CustomSelectOption<TimeSlot>[] = TIME_SLOT_OPTIONS.map(
+    (option) => {
+      const existing = readingBySlot.get(option.value);
+      return {
+        value: option.value,
+        label: option.label,
+        description: option.description,
+        icon: SLOT_ICONS[option.value],
+        disabled: Boolean(existing),
+        badge: existing ? `Logged · ${existing.glucose_value} mg/dL` : undefined,
+      };
+    }
   );
 
   const handleFormSubmit = handleSubmit(async (rawValues) => {
@@ -107,11 +164,28 @@ export function ReadingForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="reading_date">Date</Label>
-        <Input
-          id="reading_date"
-          type="date"
-          max={today}
-          {...register('reading_date')}
+        <Controller
+          name="reading_date"
+          control={control}
+          render={({ field }) => (
+            <DatePicker
+              id="reading_date"
+              ariaLabel="Date"
+              value={field.value}
+              maxDate={today}
+              onChange={(nextDate) => {
+                field.onChange(nextDate);
+                onDateChange?.(nextDate);
+                if (!isEditing) {
+                  const autoSlot = getNextAvailableSlot(
+                    existingReadingsForDate,
+                    nextDate
+                  );
+                  setValue('time_slot', autoSlot, { shouldValidate: false });
+                }
+              }}
+            />
+          )}
         />
         {errors.reading_date && (
           <p className="text-xs font-medium text-destructive" role="alert">
@@ -122,25 +196,32 @@ export function ReadingForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="time_slot">Time slot</Label>
-        <select
-          id="time_slot"
-          className="flex h-10 w-full rounded-lg border border-input bg-card px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
-          {...register('time_slot')}
-        >
-          {TIME_SLOT_OPTIONS.map((option) => {
-            const alreadyLogged = slotsTakenForSelectedDate.has(option.value);
-            return (
-              <option
-                key={option.value}
-                value={option.value}
-                disabled={alreadyLogged}
-              >
-                {option.label}
-                {alreadyLogged ? ' (Already logged)' : ''}
-              </option>
-            );
-          })}
-        </select>
+        <Controller
+          name="time_slot"
+          control={control}
+          render={({ field }) => (
+            <CustomSelect<TimeSlot>
+              id="time_slot"
+              ariaLabel="Time slot"
+              value={field.value}
+              options={slotOptions}
+              onChange={field.onChange}
+            />
+          )}
+        />
+        {!isEditing && readingBySlot.size > 0 && !allFourLogged && (
+          <p className="flex items-center gap-1.5 text-xs text-primary">
+            <Sparkles className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              {readingBySlot.size} of 4 slots logged for this date — next open slot selected.
+            </span>
+          </p>
+        )}
+        {allFourLogged && (
+          <p className="text-xs font-medium text-emerald-700">
+            All 4 daily slots are already logged for this date.
+          </p>
+        )}
         {errors.time_slot && (
           <p className="text-xs font-medium text-destructive" role="alert">
             {errors.time_slot.message}
@@ -186,4 +267,3 @@ export function ReadingForm({
     </form>
   );
 }
-

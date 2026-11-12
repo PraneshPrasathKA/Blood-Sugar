@@ -37,3 +37,33 @@ export function formatDateRange(startDate: string, endDate: string): string {
   return `${formatDisplayDate(startDate)} – ${formatDisplayDate(endDate)}`;
 }
 
+export function getDaysInMonth(dateStr: string): number {
+  const [year, month] = dateStr.split('-').map(Number);
+  if (!year || !month) return 30;
+  return new Date(year, month, 0).getDate();
+}
+
+export function isCompletedMonthRange(
+  startDate: string,
+  endDate: string
+): boolean {
+  const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+  const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+  if (
+    !startYear ||
+    !startMonth ||
+    !startDay ||
+    !endYear ||
+    !endMonth ||
+    !endDay
+  ) {
+    return false;
+  }
+
+  const sameMonth = startYear === endYear && startMonth === endMonth;
+  const startsOnFirst = startDay === 1;
+  const endsOnLastDay = endDay === new Date(endYear, endMonth, 0).getDate();
+  const isPastMonthEnd = endDate < getTodayDateString();
+
+  return sameMonth && startsOnFirst && endsOnLastDay && isPastMonthEnd;
+}

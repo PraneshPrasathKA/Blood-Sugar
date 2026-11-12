@@ -2,9 +2,11 @@
 
 import {
   Activity,
+  AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
   Calendar,
+  CheckCircle2,
   Hash,
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
@@ -20,19 +22,27 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Label } from '@/components/ui/label';
 import {
   useDailyReport,
   useMonthlyReport,
   useMonthToDateReport,
 } from '@/hooks/useReports';
-import { getGlucoseStatus, TIME_SLOT_LABELS } from '@/lib/constants';
+import {
+  getAverageRangeAssessment,
+  getGlucoseStatus,
+  getHighestRangeAssessment,
+  getLowestRangeAssessment,
+  TIME_SLOT_LABELS,
+} from '@/lib/constants';
 import {
   formatDateRange,
   formatDisplayDate,
   getTodayDateString,
+  isCompletedMonthRange,
 } from '@/lib/dates';
+import { cn } from '@/lib/utils';
 import { ReportSummary } from '@/types';
 
 type ReportTab = 'daily' | 'month-to-date' | 'monthly';
@@ -40,66 +50,212 @@ type ReportTab = 'daily' | 'month-to-date' | 'monthly';
 function SummaryMetrics({
   summary,
   isLoading,
+  isCompletedPeriod = false,
 }: {
   summary?: ReportSummary;
   isLoading: boolean;
+  isCompletedPeriod?: boolean;
 }) {
-  const cards = [
-    {
-      label: 'Highest',
-      value:
-        summary?.highest !== null && summary?.highest !== undefined
-          ? `${summary.highest} mg/dL`
-          : '—',
-      icon: ArrowUpRight,
-      iconClass: 'text-rose-500',
-    },
-    {
-      label: 'Lowest',
-      value:
-        summary?.lowest !== null && summary?.lowest !== undefined
-          ? `${summary.lowest} mg/dL`
-          : '—',
-      icon: ArrowDownRight,
-      iconClass: 'text-emerald-600',
-    },
-    {
-      label: 'Average',
-      value:
-        summary?.average !== null && summary?.average !== undefined
-          ? `${summary.average} mg/dL`
-          : '—',
-      icon: Activity,
-      iconClass: 'text-primary',
-    },
-    {
-      label: 'Total readings',
-      value: String(summary?.count ?? 0),
-      icon: Hash,
-      iconClass: 'text-muted-foreground',
-    },
-  ];
+  const highAssessment = getHighestRangeAssessment(summary?.highest);
+  const lowAssessment = getLowestRangeAssessment(summary?.lowest);
+  const avgAssessment = getAverageRangeAssessment(summary?.average);
+  const spread =
+    summary?.highest !== null &&
+    summary?.highest !== undefined &&
+    summary?.lowest !== null &&
+    summary?.lowest !== undefined
+      ? summary.highest - summary.lowest
+      : null;
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {cards.map((item) => {
-        const Icon = item.icon;
-        return (
-          <Card key={item.label}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {item.label}
-              </CardTitle>
-              <Icon className={`h-4 w-4 ${item.iconClass}`} />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold text-foreground">
-                {isLoading ? '...' : item.value}
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
+      {/* Highest Card */}
+      <Card className="relative overflow-hidden">
+        <div className="h-1 w-full bg-rose-400/80" />
+        <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4">
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            Highest
+          </CardTitle>
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
+            <ArrowUpRight className="h-4 w-4" />
+          </span>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-2xl font-semibold text-foreground">
+              {isLoading
+                ? '...'
+                : summary?.highest !== null && summary?.highest !== undefined
+                  ? `${summary.highest} mg/dL`
+                  : '—'}
+            </span>
+            {!isLoading && (
+              <Badge className={highAssessment.badgeClassName}>
+                {highAssessment.label}
+              </Badge>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {highAssessment.detail}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Lowest Card */}
+      <Card
+        className={cn(
+          'relative overflow-hidden',
+          lowAssessment.isLowWarning && 'border-amber-300 bg-amber-50/40'
+        )}
+      >
+        <div
+          className={cn(
+            'h-1 w-full',
+            lowAssessment.isLowWarning ? 'bg-amber-500' : 'bg-emerald-500/80'
+          )}
+        />
+        <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4">
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            Lowest
+          </CardTitle>
+          <span
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded-lg',
+              lowAssessment.isLowWarning
+                ? 'bg-amber-100 text-amber-700'
+                : 'bg-emerald-50 text-emerald-600'
+            )}
+          >
+            <ArrowDownRight className="h-4 w-4" />
+          </span>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-2xl font-semibold text-foreground">
+              {isLoading
+                ? '...'
+                : summary?.lowest !== null && summary?.lowest !== undefined
+                  ? `${summary.lowest} mg/dL`
+                  : '—'}
+            </span>
+            {!isLoading && (
+              <Badge className={lowAssessment.badgeClassName}>
+                {lowAssessment.label}
+              </Badge>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {lowAssessment.detail}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Average Card */}
+      <Card
+        className={cn(
+          'relative overflow-hidden',
+          avgAssessment.isLowWarning && 'border-amber-300 bg-amber-50/40'
+        )}
+      >
+        <div
+          className={cn(
+            'h-1 w-full',
+            avgAssessment.isLowWarning ? 'bg-amber-500' : 'bg-indigo-500/80'
+          )}
+        />
+        <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4">
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            Average
+          </CardTitle>
+          <span
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded-lg',
+              avgAssessment.isLowWarning
+                ? 'bg-amber-100 text-amber-700'
+                : 'bg-indigo-50 text-indigo-600'
+            )}
+          >
+            {avgAssessment.isLowWarning ? (
+              <AlertTriangle className="h-4 w-4" />
+            ) : (
+              <Activity className="h-4 w-4" />
+            )}
+          </span>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-2xl font-semibold text-foreground">
+              {isLoading
+                ? '...'
+                : summary?.average !== null && summary?.average !== undefined
+                  ? `${summary.average} mg/dL`
+                  : '—'}
+            </span>
+            {!isLoading && (
+              <Badge className={avgAssessment.badgeClassName}>
+                {avgAssessment.label}
+              </Badge>
+            )}
+          </div>
+          <p
+            className={cn(
+              'text-xs',
+              avgAssessment.isLowWarning
+                ? 'font-medium text-amber-800'
+                : 'text-muted-foreground'
+            )}
+          >
+            {avgAssessment.detail}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Total Readings & Spread Card */}
+      <Card
+        className={cn(
+          'relative overflow-hidden',
+          isCompletedPeriod && 'border-teal-200 bg-teal-50/30'
+        )}
+      >
+        <div
+          className={cn(
+            'h-1 w-full',
+            isCompletedPeriod ? 'bg-teal-500' : 'bg-slate-400/70'
+          )}
+        />
+        <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4">
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            Total readings
+          </CardTitle>
+          <span
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded-lg',
+              isCompletedPeriod
+                ? 'bg-teal-100 text-teal-700'
+                : 'bg-muted text-muted-foreground'
+            )}
+          >
+            <Hash className="h-4 w-4" />
+          </span>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-2xl font-semibold text-foreground">
+              {isLoading ? '...' : String(summary?.count ?? 0)}
+            </span>
+            {isCompletedPeriod && (
+              <Badge className="border-teal-200 bg-teal-50 text-teal-800">
+                Finalized
+              </Badge>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {spread !== null
+              ? `High–Low spread: ${spread} mg/dL`
+              : 'Target zone: 70–140 mg/dL'}
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -120,6 +276,16 @@ function ReportsContent() {
   const mtdQuery = useMonthToDateReport(selectedDate);
   const monthlyQuery = useMonthlyReport(selectedDate);
 
+  const mtdRange = mtdQuery.data?.range;
+  const mtdCompleted = mtdRange
+    ? isCompletedMonthRange(mtdRange.startDate, mtdRange.endDate)
+    : false;
+
+  const monthlyRange = monthlyQuery.data?.range;
+  const monthlyCompleted = monthlyRange
+    ? isCompletedMonthRange(monthlyRange.startDate, monthlyRange.endDate)
+    : true;
+
   const tabs: Array<{ id: ReportTab; label: string }> = [
     { id: 'daily', label: 'Daily' },
     { id: 'month-to-date', label: 'Month-to-date' },
@@ -138,22 +304,19 @@ function ReportsContent() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="space-y-1">
-            <Label htmlFor="report-date" className="text-xs text-muted-foreground">
-              Reference date
-            </Label>
-            <Input
-              id="report-date"
-              type="date"
-              max={today}
-              value={selectedDate}
-              onChange={(e) => {
-                if (e.target.value) setSelectedDate(e.target.value);
-              }}
-              className="w-auto"
-            />
-          </div>
+        <div className="space-y-1.5 sm:w-56">
+          <Label htmlFor="report-date" className="text-xs text-muted-foreground">
+            Reference date
+          </Label>
+          <DatePicker
+            id="report-date"
+            ariaLabel="Reference date"
+            value={selectedDate}
+            maxDate={today}
+            onChange={(nextDate) => {
+              if (nextDate) setSelectedDate(nextDate);
+            }}
+          />
         </div>
       </div>
 
@@ -252,31 +415,41 @@ function ReportsContent() {
       {/* Month-to-date Report */}
       {activeTab === 'month-to-date' && (
         <div className="space-y-6">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Calendar className="h-4 w-4 text-primary" />
-            <span>
-              Month-to-date range:{' '}
-              <strong className="font-medium text-foreground">
-                {mtdQuery.data
-                  ? formatDateRange(
-                      mtdQuery.data.range.startDate,
-                      mtdQuery.data.range.endDate
-                    )
-                  : '...'}
-              </strong>
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-primary" />
+              <span>
+                Month-to-date range:{' '}
+                <strong className="font-medium text-foreground">
+                  {mtdRange
+                    ? formatDateRange(mtdRange.startDate, mtdRange.endDate)
+                    : '...'}
+                </strong>
+              </span>
+            </div>
+            {mtdCompleted && (
+              <Badge className="gap-1 border-teal-200 bg-teal-50 text-teal-800">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Full month completed
+              </Badge>
+            )}
           </div>
 
           <SummaryMetrics
             summary={mtdQuery.data?.summary}
             isLoading={mtdQuery.isLoading}
+            isCompletedPeriod={mtdCompleted}
           />
 
           <Card>
             <CardHeader>
-              <CardTitle>Month-to-date trend</CardTitle>
+              <CardTitle>
+                {mtdCompleted
+                  ? 'Completed month trend'
+                  : 'Month-to-date trend'}
+              </CardTitle>
               <CardDescription>
-                Daily average blood glucose across the selected period
+                Daily average, high, and low blood glucose across the selected period
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -287,6 +460,9 @@ function ReportsContent() {
               ) : (
                 <GlucoseTrendChart
                   data={mtdQuery.data?.dailySeries ?? []}
+                  range={mtdRange}
+                  overallAverage={mtdQuery.data?.summary.average}
+                  isCompletedMonth={mtdCompleted}
                   emptyMessage="No readings found in this month-to-date range."
                 />
               )}
@@ -298,31 +474,38 @@ function ReportsContent() {
       {/* Previous Month Report */}
       {activeTab === 'monthly' && (
         <div className="space-y-6">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Calendar className="h-4 w-4 text-primary" />
-            <span>
-              Previous calendar month:{' '}
-              <strong className="font-medium text-foreground">
-                {monthlyQuery.data
-                  ? formatDateRange(
-                      monthlyQuery.data.range.startDate,
-                      monthlyQuery.data.range.endDate
-                    )
-                  : '...'}
-              </strong>
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-teal-600" />
+              <span>
+                Previous calendar month:{' '}
+                <strong className="font-medium text-foreground">
+                  {monthlyRange
+                    ? formatDateRange(
+                        monthlyRange.startDate,
+                        monthlyRange.endDate
+                      )
+                    : '...'}
+                </strong>
+              </span>
+            </div>
+            <Badge className="gap-1 border-teal-200 bg-teal-50 text-teal-800">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Completed month · Finalized
+            </Badge>
           </div>
 
           <SummaryMetrics
             summary={monthlyQuery.data?.summary}
             isLoading={monthlyQuery.isLoading}
+            isCompletedPeriod={monthlyCompleted}
           />
 
-          <Card>
+          <Card className="border-teal-200/80">
             <CardHeader>
-              <CardTitle>Previous month trend</CardTitle>
+              <CardTitle>Completed month trend</CardTitle>
               <CardDescription>
-                Daily average blood glucose for the entire previous calendar month
+                Finalized daily average, high, and low blood glucose for the entire previous calendar month
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -333,6 +516,9 @@ function ReportsContent() {
               ) : (
                 <GlucoseTrendChart
                   data={monthlyQuery.data?.dailySeries ?? []}
+                  range={monthlyRange}
+                  overallAverage={monthlyQuery.data?.summary.average}
+                  isCompletedMonth={monthlyCompleted}
                   emptyMessage="No readings recorded during the previous calendar month."
                 />
               )}
@@ -359,4 +545,3 @@ export default function ReportsPage() {
     </AppShell>
   );
 }
-

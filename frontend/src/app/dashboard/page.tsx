@@ -2,6 +2,7 @@
 
 import {
   Activity,
+  AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
   BarChart3,
@@ -29,18 +30,30 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useDeleteReading, useReadings } from '@/hooks/useReadings';
 import { useDailyReport, useMonthToDateReport } from '@/hooks/useReports';
-import { getGlucoseStatus, TIME_SLOT_LABELS } from '@/lib/constants';
-import { formatDisplayDate, getTodayDateString } from '@/lib/dates';
+import { useToast } from '@/hooks/useToast';
+import {
+  getAverageRangeAssessment,
+  getGlucoseStatus,
+  getHighestRangeAssessment,
+  getLowestRangeAssessment,
+  TIME_SLOT_LABELS,
+} from '@/lib/constants';
+import {
+  formatDisplayDate,
+  getTodayDateString,
+  isCompletedMonthRange,
+} from '@/lib/dates';
+import { cn } from '@/lib/utils';
 import { Reading } from '@/types';
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const toast = useToast();
   const today = getTodayDateString();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingReading, setEditingReading] = useState<Reading | null>(null);
   const [deletingReading, setDeletingReading] = useState<Reading | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const dailyQuery = useDailyReport(today);
   const mtdQuery = useMonthToDateReport(today);
@@ -50,6 +63,18 @@ export default function DashboardPage() {
   const todaySummary = dailyQuery.data?.summary;
   const mtdSummary = mtdQuery.data?.summary;
   const recentReadings = recentQuery.data?.readings ?? [];
+
+  const todayCount = todaySummary?.count ?? 0;
+  const allTodayLogged = !dailyQuery.isLoading && todayCount >= 4;
+
+  const avgAssessment = getAverageRangeAssessment(mtdSummary?.average);
+  const highAssessment = getHighestRangeAssessment(mtdSummary?.highest);
+  const lowAssessment = getLowestRangeAssessment(mtdSummary?.lowest);
+
+  const mtdRange = mtdQuery.data?.range;
+  const mtdCompleted = mtdRange
+    ? isCompletedMonthRange(mtdRange.startDate, mtdRange.endDate)
+    : false;
 
   const handleOpenAdd = () => {
     setEditingReading(null);
@@ -64,7 +89,7 @@ export default function DashboardPage() {
   const handleConfirmDelete = async (reading: Reading) => {
     await deleteMutation.mutateAsync(reading.id);
     setDeletingReading(null);
-    setStatusMessage('Reading deleted successfully.');
+    toast.success('Reading deleted successfully.');
   };
 
   return (
@@ -101,102 +126,229 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {statusMessage && (
-          <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-            <span className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              {statusMessage}
-            </span>
-            <button
-              type="button"
-              onClick={() => setStatusMessage(null)}
-              className="text-xs font-medium underline"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
-
         {/* Statistics Cards */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          {/* Today's Readings Card (turns green when all 4 slots are logged) */}
+          <Card
+            className={cn(
+              'relative overflow-hidden transition-colors',
+              allTodayLogged
+                ? 'border-emerald-300 bg-emerald-50/40'
+                : 'border-border bg-card'
+            )}
+          >
+            <div
+              className={cn(
+                'h-1 w-full',
+                allTodayLogged ? 'bg-emerald-500' : 'bg-primary/70'
+              )}
+            />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Today&apos;s readings
               </CardTitle>
-              <Calendar className="h-4 w-4 text-primary" />
+              <span
+                className={cn(
+                  'flex h-8 w-8 items-center justify-center rounded-lg',
+                  allTodayLogged
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : 'bg-primary/10 text-primary'
+                )}
+              >
+                {allTodayLogged ? (
+                  <CheckCircle2 className="h-4 w-4" />
+                ) : (
+                  <Calendar className="h-4 w-4" />
+                )}
+              </span>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold text-foreground">
-                {dailyQuery.isLoading ? '—' : `${todaySummary?.count ?? 0} / 4`}
+            <CardContent className="space-y-2.5">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-2xl font-semibold text-foreground">
+                  {dailyQuery.isLoading ? '—' : `${todayCount} / 4`}
+                </span>
+                {!dailyQuery.isLoading && (
+                  <Badge
+                    className={
+                      allTodayLogged
+                        ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
+                        : 'border-border bg-muted text-muted-foreground'
+                    }
+                  >
+                    {allTodayLogged ? 'Complete' : `${4 - todayCount} left`}
+                  </Badge>
+                )}
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {todaySummary?.count === 4
-                  ? 'All daily slots logged'
-                  : `${4 - (todaySummary?.count ?? 0)} slot(s) remaining today`}
+              <div className="grid grid-cols-4 gap-1.5" aria-hidden="true">
+                {[0, 1, 2, 3].map((idx) => (
+                  <div
+                    key={idx}
+                    className={cn(
+                      'h-1.5 rounded-full transition-colors',
+                      idx < todayCount
+                        ? allTodayLogged
+                          ? 'bg-emerald-500'
+                          : 'bg-primary'
+                        : 'bg-muted'
+                    )}
+                  />
+                ))}
+              </div>
+              <p
+                className={cn(
+                  'text-xs',
+                  allTodayLogged
+                    ? 'font-medium text-emerald-700'
+                    : 'text-muted-foreground'
+                )}
+              >
+                {allTodayLogged
+                  ? 'All 4 daily slots updated today'
+                  : 'Log fasting & post-meal readings'}
               </p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          {/* Average Glucose Card */}
+          <Card
+            className={cn(
+              'relative overflow-hidden transition-colors',
+              avgAssessment.isLowWarning && 'border-amber-300 bg-amber-50/40'
+            )}
+          >
+            <div
+              className={cn(
+                'h-1 w-full',
+                avgAssessment.isLowWarning ? 'bg-amber-500' : 'bg-indigo-500/80'
+              )}
+            />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Average glucose
               </CardTitle>
-              <Activity className="h-4 w-4 text-primary" />
+              <span
+                className={cn(
+                  'flex h-8 w-8 items-center justify-center rounded-lg',
+                  avgAssessment.isLowWarning
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-indigo-50 text-indigo-600'
+                )}
+              >
+                {avgAssessment.isLowWarning ? (
+                  <AlertTriangle className="h-4 w-4" />
+                ) : (
+                  <Activity className="h-4 w-4" />
+                )}
+              </span>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold text-foreground">
-                {mtdQuery.isLoading
-                  ? '—'
-                  : mtdSummary?.average !== null && mtdSummary?.average !== undefined
-                    ? `${mtdSummary.average} mg/dL`
-                    : 'No data'}
+            <CardContent className="space-y-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-2xl font-semibold text-foreground">
+                  {mtdQuery.isLoading
+                    ? '—'
+                    : mtdSummary?.average !== null &&
+                        mtdSummary?.average !== undefined
+                      ? `${mtdSummary.average} mg/dL`
+                      : 'No data'}
+                </span>
+                {!mtdQuery.isLoading && (
+                  <Badge className={avgAssessment.badgeClassName}>
+                    {avgAssessment.label}
+                  </Badge>
+                )}
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Month-to-date ({mtdSummary?.count ?? 0} readings)
+              <p
+                className={cn(
+                  'text-xs',
+                  avgAssessment.isLowWarning
+                    ? 'font-medium text-amber-800'
+                    : 'text-muted-foreground'
+                )}
+              >
+                {avgAssessment.detail}
               </p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          {/* Highest Reading Card */}
+          <Card className="relative overflow-hidden">
+            <div className="h-1 w-full bg-rose-400/80" />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Highest reading
               </CardTitle>
-              <ArrowUpRight className="h-4 w-4 text-rose-500" />
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
+                <ArrowUpRight className="h-4 w-4" />
+              </span>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold text-foreground">
-                {mtdQuery.isLoading
-                  ? '—'
-                  : mtdSummary?.highest !== null && mtdSummary?.highest !== undefined
-                    ? `${mtdSummary.highest} mg/dL`
-                    : 'No data'}
+            <CardContent className="space-y-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-2xl font-semibold text-foreground">
+                  {mtdQuery.isLoading
+                    ? '—'
+                    : mtdSummary?.highest !== null &&
+                        mtdSummary?.highest !== undefined
+                      ? `${mtdSummary.highest} mg/dL`
+                      : 'No data'}
+                </span>
+                {!mtdQuery.isLoading && (
+                  <Badge className={highAssessment.badgeClassName}>
+                    {highAssessment.label}
+                  </Badge>
+                )}
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Month-to-date peak
+              <p className="text-xs text-muted-foreground">
+                {highAssessment.detail}
               </p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          {/* Lowest Reading Card */}
+          <Card
+            className={cn(
+              'relative overflow-hidden',
+              lowAssessment.isLowWarning && 'border-amber-300 bg-amber-50/40'
+            )}
+          >
+            <div
+              className={cn(
+                'h-1 w-full',
+                lowAssessment.isLowWarning ? 'bg-amber-500' : 'bg-emerald-500/80'
+              )}
+            />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Lowest reading
               </CardTitle>
-              <ArrowDownRight className="h-4 w-4 text-emerald-600" />
+              <span
+                className={cn(
+                  'flex h-8 w-8 items-center justify-center rounded-lg',
+                  lowAssessment.isLowWarning
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-emerald-50 text-emerald-600'
+                )}
+              >
+                <ArrowDownRight className="h-4 w-4" />
+              </span>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold text-foreground">
-                {mtdQuery.isLoading
-                  ? '—'
-                  : mtdSummary?.lowest !== null && mtdSummary?.lowest !== undefined
-                    ? `${mtdSummary.lowest} mg/dL`
-                    : 'No data'}
+            <CardContent className="space-y-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-2xl font-semibold text-foreground">
+                  {mtdQuery.isLoading
+                    ? '—'
+                    : mtdSummary?.lowest !== null &&
+                        mtdSummary?.lowest !== undefined
+                      ? `${mtdSummary.lowest} mg/dL`
+                      : 'No data'}
+                </span>
+                {!mtdQuery.isLoading && (
+                  <Badge className={lowAssessment.badgeClassName}>
+                    {lowAssessment.label}
+                  </Badge>
+                )}
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Month-to-date minimum
+              <p className="text-xs text-muted-foreground">
+                {lowAssessment.detail}
               </p>
             </CardContent>
           </Card>
@@ -208,7 +360,7 @@ export default function DashboardPage() {
             <div>
               <CardTitle>Month-to-date glucose trend</CardTitle>
               <CardDescription>
-                Daily average blood glucose (mg/dL) from your recorded entries
+                Daily average, high, and low blood glucose (mg/dL) from your recorded entries
               </CardDescription>
             </div>
             <Link
@@ -226,6 +378,9 @@ export default function DashboardPage() {
             ) : (
               <GlucoseTrendChart
                 data={mtdQuery.data?.dailySeries ?? []}
+                range={mtdRange}
+                overallAverage={mtdSummary?.average}
+                isCompletedMonth={mtdCompleted}
                 emptyMessage="Add your first reading this month to see your glucose trend."
               />
             )}
@@ -333,7 +488,6 @@ export default function DashboardPage() {
         open={formOpen}
         onOpenChange={setFormOpen}
         editingReading={editingReading}
-        onSuccess={(msg) => setStatusMessage(msg)}
       />
 
       <DeleteReadingDialog
@@ -345,4 +499,3 @@ export default function DashboardPage() {
     </AppShell>
   );
 }
-
