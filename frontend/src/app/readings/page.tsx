@@ -67,7 +67,7 @@ export default function ReadingsPage() {
     setAddError(null);
     try {
       await createMutation.mutateAsync(values);
-      toast.success('Reading added successfully.');
+      toast.success('Reading added successfully.', 'Reading added');
     } catch (error) {
       if (error instanceof ApiError) {
         setAddError(error.message);
@@ -84,7 +84,7 @@ export default function ReadingsPage() {
     try {
       await deleteMutation.mutateAsync(reading.id);
       setDeletingReading(null);
-      toast.success('Reading deleted successfully.');
+      toast.danger('Reading deleted successfully.', 'Reading deleted', 'trash');
     } catch {
       toast.error('Failed to delete reading. Please try again.');
     }

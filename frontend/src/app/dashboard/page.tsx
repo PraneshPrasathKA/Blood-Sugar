@@ -90,7 +90,7 @@ export default function DashboardPage() {
     try {
       await deleteMutation.mutateAsync(reading.id);
       setDeletingReading(null);
-      toast.success('Reading deleted successfully.');
+      toast.danger('Reading deleted successfully.', 'Reading deleted', 'trash');
     } catch {
       toast.error('Failed to delete reading. Please try again.');
     }

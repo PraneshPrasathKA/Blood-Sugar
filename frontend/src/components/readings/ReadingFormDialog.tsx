@@ -74,12 +74,12 @@ export function ReadingFormDialog({
           input: values,
         });
         const msg = 'Reading updated successfully.';
-        toast.success(msg);
+        toast.info(msg, 'Reading updated');
         onSuccess?.(msg);
       } else {
         await createMutation.mutateAsync(values);
         const msg = 'Reading added successfully.';
-        toast.success(msg);
+        toast.success(msg, 'Reading added');
         onSuccess?.(msg);
       }
       handleOpenChange(false);

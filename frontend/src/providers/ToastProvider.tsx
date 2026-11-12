@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Info, Trash2, X } from 'lucide-react';
 import {
   createContext,
   ReactNode,
@@ -12,13 +12,14 @@ import {
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 
-type ToastVariant = 'success' | 'error' | 'info';
+type ToastVariant = 'success' | 'danger' | 'info';
 
 interface ToastItem {
   id: string;
   title?: string;
   message: string;
   variant: ToastVariant;
+  iconType?: 'trash' | 'default';
   duration: number;
 }
 
@@ -27,9 +28,11 @@ interface ToastContextValue {
     title?: string;
     message: string;
     variant?: ToastVariant;
+    iconType?: 'trash' | 'default';
     duration?: number;
   }) => void;
   success: (message: string, title?: string) => void;
+  danger: (message: string, title?: string, iconType?: 'trash' | 'default') => void;
   error: (message: string, title?: string) => void;
   info: (message: string, title?: string) => void;
 }
@@ -60,26 +63,41 @@ function ToastCard({
     {
       container: string;
       iconWrap: string;
+      titleText: string;
+      messageText: string;
+      barTrack: string;
       bar: string;
       Icon: typeof CheckCircle2;
     }
   > = {
     success: {
-      container: 'border-emerald-200 border-l-4 border-l-emerald-500 bg-white text-slate-900',
-      iconWrap: 'bg-emerald-50 text-emerald-600',
-      bar: 'bg-emerald-500',
+      container:
+        'border-emerald-300 border-l-4 border-l-emerald-600 bg-emerald-50 text-emerald-950',
+      iconWrap: 'bg-emerald-100 text-emerald-700',
+      titleText: 'text-emerald-950',
+      messageText: 'text-emerald-800',
+      barTrack: 'bg-emerald-100',
+      bar: 'bg-emerald-600',
       Icon: CheckCircle2,
     },
-    error: {
-      container: 'border-rose-200 border-l-4 border-l-rose-500 bg-white text-slate-900',
-      iconWrap: 'bg-rose-50 text-rose-600',
-      bar: 'bg-rose-500',
-      Icon: AlertCircle,
+    danger: {
+      container:
+        'border-rose-300 border-l-4 border-l-rose-600 bg-rose-50 text-rose-950',
+      iconWrap: 'bg-rose-100 text-rose-700',
+      titleText: 'text-rose-950',
+      messageText: 'text-rose-800',
+      barTrack: 'bg-rose-100',
+      bar: 'bg-rose-600',
+      Icon: toast.iconType === 'trash' ? Trash2 : AlertCircle,
     },
     info: {
-      container: 'border-indigo-200 border-l-4 border-l-indigo-500 bg-white text-slate-900',
-      iconWrap: 'bg-indigo-50 text-indigo-600',
-      bar: 'bg-indigo-500',
+      container:
+        'border-blue-300 border-l-4 border-l-blue-600 bg-blue-50 text-blue-950',
+      iconWrap: 'bg-blue-100 text-blue-700',
+      titleText: 'text-blue-950',
+      messageText: 'text-blue-800',
+      barTrack: 'bg-blue-100',
+      bar: 'bg-blue-600',
       Icon: Info,
     },
   };
@@ -91,6 +109,7 @@ function ToastCard({
     <div
       role="status"
       aria-live="polite"
+      data-toast-variant={toast.variant}
       style={{ animation: 'sweety-toast-enter 200ms ease-out forwards' }}
       className={cn(
         'pointer-events-auto relative overflow-hidden rounded-xl border p-4 shadow-xl',
@@ -109,24 +128,24 @@ function ToastCard({
 
         <div className="min-w-0 flex-1">
           {toast.title && (
-            <p className="text-sm font-semibold text-slate-900">
+            <p className={cn('text-sm font-semibold', style.titleText)}>
               {toast.title}
             </p>
           )}
-          <p className="text-sm text-slate-600">{toast.message}</p>
+          <p className={cn('text-sm', style.messageText)}>{toast.message}</p>
         </div>
 
         <button
           type="button"
           onClick={() => onDismiss(toast.id)}
           aria-label="Close notification"
-          className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+          className="rounded-md p-1 text-slate-500 transition-colors hover:bg-black/5 hover:text-slate-800"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-100">
+      <div className={cn('absolute bottom-0 left-0 right-0 h-1', style.barTrack)}>
         <div
           className={cn('h-full origin-left', style.bar)}
           style={{
@@ -155,17 +174,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       title,
       message,
       variant = 'info',
+      iconType = 'default',
       duration = DEFAULT_DURATION_MS,
     }: {
       title?: string;
       message: string;
       variant?: ToastVariant;
+      iconType?: 'trash' | 'default';
       duration?: number;
     }) => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       setToasts((prev) => [
         ...prev.slice(-3),
-        { id, title, message, variant, duration },
+        { id, title, message, variant, iconType, duration },
       ]);
     },
     []
@@ -178,9 +199,20 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [showToast]
   );
 
+  const danger = useCallback(
+    (
+      message: string,
+      title = 'Deleted',
+      iconType: 'trash' | 'default' = 'trash'
+    ) => {
+      showToast({ title, message, variant: 'danger', iconType });
+    },
+    [showToast]
+  );
+
   const error = useCallback(
     (message: string, title = 'Error') => {
-      showToast({ title, message, variant: 'error' });
+      showToast({ title, message, variant: 'danger', iconType: 'default' });
     },
     [showToast]
   );
@@ -197,7 +229,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       aria-label="Notifications"
       style={{
         position: 'fixed',
-        top: '1.25rem',
+        bottom: '1.25rem',
         right: '1.25rem',
         zIndex: 9999,
         width: 'min(24rem, calc(100vw - 2rem))',
@@ -211,7 +243,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <ToastContext.Provider value={{ showToast, success, error, info }}>
+    <ToastContext.Provider value={{ showToast, success, danger, error, info }}>
       {children}
       {mounted && typeof document !== 'undefined'
         ? createPortal(toastContainer, document.body)
