@@ -1,18 +1,24 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { getTodayDateString } from '@/lib/dates';
+import { Reading } from '@/types';
 import { ReadingForm } from './ReadingForm';
 
 describe('ReadingForm', () => {
   const today = getTodayDateString();
 
-  function getFutureDate(): string {
-    const d = new Date();
-    d.setDate(d.getDate() + 2);
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+  function buildReading(
+    overrides: Partial<Reading> & { time_slot: Reading['time_slot'] }
+  ): Reading {
+    return {
+      id: `id-${overrides.time_slot}`,
+      user_id: 'user-1',
+      reading_date: today,
+      glucose_value: 110,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      ...overrides,
+    };
   }
 
   it('shows required error when glucose value is empty', async () => {
@@ -58,31 +64,53 @@ describe('ReadingForm', () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it('shows error when a future date is selected', async () => {
+  it('disables future dates in the custom calendar date picker', async () => {
     const onSubmit = jest.fn();
     render(<ReadingForm defaultDate={today} onSubmit={onSubmit} />);
 
-    const dateInput = screen.getByLabelText(/^date$/i);
-    const glucoseInput = screen.getByLabelText(/glucose value/i);
+    await userEvent.click(screen.getByRole('button', { name: /^date$/i }));
 
-    fireEvent.change(dateInput, { target: { value: getFutureDate() } });
-    await userEvent.type(glucoseInput, '115');
-    await userEvent.click(screen.getByRole('button', { name: /add reading/i }));
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const yyyy = tomorrow.getFullYear();
+    const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
+    const dd = String(tomorrow.getDate()).padStart(2, '0');
+    const tomorrowIso = `${yyyy}-${mm}-${dd}`;
 
-    expect(
-      await screen.findByText('Date cannot be in the future.')
-    ).toBeInTheDocument();
-    expect(onSubmit).not.toHaveBeenCalled();
+    if (tomorrow.getMonth() === new Date().getMonth()) {
+      expect(screen.getByRole('button', { name: tomorrowIso })).toBeDisabled();
+    } else {
+      await userEvent.click(screen.getByRole('button', { name: /next month/i }));
+      expect(screen.getByRole('button', { name: tomorrowIso })).toBeDisabled();
+    }
   });
 
-  it('submits valid reading data with parsed integer glucose value', async () => {
+  it('automatically selects the next slot after already logged readings', () => {
+    const existing = [
+      buildReading({ time_slot: 'MORNING_FASTING', glucose_value: 95 }),
+    ];
+
+    render(
+      <ReadingForm
+        defaultDate={today}
+        existingReadingsForDate={existing}
+        onSubmit={jest.fn()}
+      />
+    );
+
+    const slotCombobox = screen.getByRole('combobox', { name: /time slot/i });
+    expect(slotCombobox).toHaveTextContent('After breakfast');
+  });
+
+  it('submits valid reading using the custom time slot dropdown', async () => {
     const onSubmit = jest.fn().mockResolvedValue(undefined);
     render(<ReadingForm defaultDate={today} onSubmit={onSubmit} />);
 
-    await userEvent.selectOptions(
-      screen.getByLabelText(/time slot/i),
-      'AFTER_LUNCH'
+    await userEvent.click(screen.getByRole('combobox', { name: /time slot/i }));
+    await userEvent.click(
+      screen.getByRole('option', { name: /after lunch/i })
     );
+
     await userEvent.type(screen.getByLabelText(/glucose value/i), '142');
     await userEvent.click(screen.getByRole('button', { name: /add reading/i }));
 
@@ -109,4 +137,3 @@ describe('ReadingForm', () => {
     ).toBeInTheDocument();
   });
 });
-
