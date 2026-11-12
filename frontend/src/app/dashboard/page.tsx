@@ -228,7 +228,8 @@ export default function DashboardPage() {
             />
             <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Average glucose
+                Average glucose{' '}
+                <span className="text-[11px] font-normal">(MTD)</span>
               </CardTitle>
               <span
                 className={cn(
@@ -279,7 +280,8 @@ export default function DashboardPage() {
             <div className="h-1 w-full bg-rose-400/80" />
             <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Highest reading
+                Highest reading{' '}
+                <span className="text-[11px] font-normal">(MTD)</span>
               </CardTitle>
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
                 <ArrowUpRight className="h-4 w-4" />
@@ -322,7 +324,8 @@ export default function DashboardPage() {
             />
             <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Lowest reading
+                Lowest reading{' '}
+                <span className="text-[11px] font-normal">(MTD)</span>
               </CardTitle>
               <span
                 className={cn(

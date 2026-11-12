@@ -18,11 +18,13 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/useToast';
 import { LoginFormValues, loginFormSchema } from '@/lib/validations';
 import { ApiError } from '@/services/api';
 
 export default function LoginPage() {
   const { login, isAuthenticated, isLoading } = useAuth();
+  const toast = useToast();
   const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -48,13 +50,17 @@ export default function LoginPage() {
   const onSubmit = async (values: LoginFormValues) => {
     setServerError(null);
     try {
-      await login(values);
+      const signedInUser = await login(values);
+      toast.info(`Signed in as ${signedInUser.name}.`, 'Welcome back');
       router.replace('/dashboard');
     } catch (error) {
       if (error instanceof ApiError) {
         setServerError(error.message);
+        toast.error(error.message, 'Sign in failed');
       } else {
-        setServerError('Unable to sign in. Please try again.');
+        const msg = 'Unable to sign in. Please try again.';
+        setServerError(msg);
+        toast.error(msg);
       }
     }
   };

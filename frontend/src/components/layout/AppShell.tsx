@@ -13,6 +13,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { ReactNode, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
 
 const NAV_ITEMS = [
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, isLoading, isAuthenticated, logout } = useAuth();
+  const toast = useToast();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -45,6 +47,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const handleLogout = async () => {
     await logout();
+    toast.info('You have been signed out.', 'Signed out');
     router.replace('/login');
   };
 

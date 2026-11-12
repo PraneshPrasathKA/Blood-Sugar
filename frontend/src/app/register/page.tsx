@@ -18,11 +18,13 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/useToast';
 import { RegisterFormValues, registerFormSchema } from '@/lib/validations';
 import { ApiError } from '@/services/api';
 
 export default function RegisterPage() {
   const { register: registerUser, isAuthenticated, isLoading } = useAuth();
+  const toast = useToast();
   const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -49,13 +51,17 @@ export default function RegisterPage() {
   const onSubmit = async (values: RegisterFormValues) => {
     setServerError(null);
     try {
-      await registerUser(values);
+      const createdUser = await registerUser(values);
+      toast.success(`Welcome to Sweety, ${createdUser.name}!`, 'Account created');
       router.replace('/dashboard');
     } catch (error) {
       if (error instanceof ApiError) {
         setServerError(error.message);
+        toast.error(error.message, 'Registration failed');
       } else {
-        setServerError('Unable to create account. Please try again.');
+        const msg = 'Unable to create account. Please try again.';
+        setServerError(msg);
+        toast.error(msg);
       }
     }
   };

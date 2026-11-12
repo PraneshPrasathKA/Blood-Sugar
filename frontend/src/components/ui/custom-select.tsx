@@ -1,7 +1,7 @@
 'use client';
 
 import { Check, ChevronDown } from 'lucide-react';
-import { ReactNode, useEffect, useRef, useState } from 'react';
+import { KeyboardEvent as ReactKeyboardEvent, ReactNode, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface CustomSelectOption<T extends string = string> {
@@ -35,12 +35,25 @@ export function CustomSelect<T extends string = string>({
   className,
 }: CustomSelectProps<T>) {
   const [open, setOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find((opt) => opt.value === value);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setHighlightedIndex(-1);
+      return;
+    }
+
+    const currentIdx = options.findIndex(
+      (opt) => opt.value === value && !opt.disabled
+    );
+    if (currentIdx >= 0) {
+      setHighlightedIndex(currentIdx);
+    } else {
+      setHighlightedIndex(options.findIndex((opt) => !opt.disabled));
+    }
 
     const handleOutside = (event: MouseEvent) => {
       if (
@@ -63,10 +76,53 @@ export function CustomSelect<T extends string = string>({
       document.removeEventListener('mousedown', handleOutside);
       document.removeEventListener('keydown', handleEscape);
     };
-  }, [open]);
+  }, [open, options, value]);
+
+  const moveHighlight = (direction: 1 | -1) => {
+    if (options.length === 0) return;
+    let idx = highlightedIndex;
+    for (let step = 0; step < options.length; step++) {
+      idx = (idx + direction + options.length) % options.length;
+      if (!options[idx].disabled) {
+        setHighlightedIndex(idx);
+        return;
+      }
+    }
+  };
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (disabled) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (!open) {
+        setOpen(true);
+      } else {
+        moveHighlight(1);
+      }
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!open) {
+        setOpen(true);
+      } else {
+        moveHighlight(-1);
+      }
+    } else if (event.key === 'Enter' && open) {
+      event.preventDefault();
+      const target = options[highlightedIndex];
+      if (target && !target.disabled) {
+        onChange(target.value);
+        setOpen(false);
+      }
+    }
+  };
 
   return (
-    <div ref={containerRef} className={cn('relative', className)}>
+    <div
+      ref={containerRef}
+      onKeyDown={handleKeyDown}
+      className={cn('relative', className)}
+    >
       <button
         id={id}
         type="button"
@@ -103,8 +159,9 @@ export function CustomSelect<T extends string = string>({
           aria-label={ariaLabel || 'Options'}
           className="absolute left-0 right-0 top-11 z-50 max-h-72 overflow-auto rounded-xl border border-border bg-card p-1.5 shadow-xl"
         >
-          {options.map((option) => {
+          {options.map((option, idx) => {
             const isSelected = option.value === value;
+            const isHighlighted = idx === highlightedIndex;
             return (
               <button
                 key={option.value}
@@ -113,6 +170,9 @@ export function CustomSelect<T extends string = string>({
                 aria-selected={isSelected}
                 aria-disabled={option.disabled}
                 disabled={option.disabled}
+                onMouseEnter={() => {
+                  if (!option.disabled) setHighlightedIndex(idx);
+                }}
                 onClick={() => {
                   if (option.disabled) return;
                   onChange(option.value);
@@ -122,7 +182,9 @@ export function CustomSelect<T extends string = string>({
                   'flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors',
                   isSelected
                     ? 'bg-accent text-accent-foreground font-medium'
-                    : 'text-foreground hover:bg-muted',
+                    : isHighlighted
+                      ? 'bg-muted text-foreground'
+                      : 'text-foreground hover:bg-muted',
                   option.disabled &&
                     'cursor-not-allowed opacity-55 hover:bg-transparent'
                 )}
@@ -164,4 +226,3 @@ export function CustomSelect<T extends string = string>({
     </div>
   );
 }
-
