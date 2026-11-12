@@ -148,6 +148,9 @@ export function ReadingForm({
       time_slot: parsed.time_slot,
       glucose_value: Number(parsed.glucose_value),
     });
+    if (!isEditing) {
+      setValue('glucose_value', '', { shouldValidate: false });
+    }
   });
 
   return (

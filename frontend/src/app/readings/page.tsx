@@ -81,9 +81,13 @@ export default function ReadingsPage() {
   };
 
   const handleConfirmDelete = async (reading: Reading) => {
-    await deleteMutation.mutateAsync(reading.id);
-    setDeletingReading(null);
-    toast.success('Reading deleted successfully.');
+    try {
+      await deleteMutation.mutateAsync(reading.id);
+      setDeletingReading(null);
+      toast.success('Reading deleted successfully.');
+    } catch {
+      toast.error('Failed to delete reading. Please try again.');
+    }
   };
 
   return (

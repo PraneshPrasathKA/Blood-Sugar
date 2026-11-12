@@ -9,6 +9,7 @@ import {
   useEffect,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 
 type ToastVariant = 'success' | 'error' | 'info';
@@ -44,17 +45,12 @@ function ToastCard({
   toast: ToastItem;
   onDismiss: (id: string) => void;
 }) {
-  const [visible, setVisible] = useState(false);
-
   useEffect(() => {
-    const enterTimer = setTimeout(() => setVisible(true), 10);
     const closeTimer = setTimeout(() => {
-      setVisible(false);
-      setTimeout(() => onDismiss(toast.id), 200);
+      onDismiss(toast.id);
     }, toast.duration);
 
     return () => {
-      clearTimeout(enterTimer);
       clearTimeout(closeTimer);
     };
   }, [toast.id, toast.duration, onDismiss]);
@@ -69,19 +65,19 @@ function ToastCard({
     }
   > = {
     success: {
-      container: 'border-emerald-200 bg-card text-foreground',
+      container: 'border-emerald-200 border-l-4 border-l-emerald-500 bg-white text-slate-900',
       iconWrap: 'bg-emerald-50 text-emerald-600',
       bar: 'bg-emerald-500',
       Icon: CheckCircle2,
     },
     error: {
-      container: 'border-rose-200 bg-card text-foreground',
+      container: 'border-rose-200 border-l-4 border-l-rose-500 bg-white text-slate-900',
       iconWrap: 'bg-rose-50 text-rose-600',
       bar: 'bg-rose-500',
       Icon: AlertCircle,
     },
     info: {
-      container: 'border-indigo-200 bg-card text-foreground',
+      container: 'border-indigo-200 border-l-4 border-l-indigo-500 bg-white text-slate-900',
       iconWrap: 'bg-indigo-50 text-indigo-600',
       bar: 'bg-indigo-500',
       Icon: Info,
@@ -95,10 +91,10 @@ function ToastCard({
     <div
       role="status"
       aria-live="polite"
+      style={{ animation: 'sweety-toast-enter 200ms ease-out forwards' }}
       className={cn(
-        'pointer-events-auto relative overflow-hidden rounded-xl border p-4 shadow-lg transition-all duration-200',
-        style.container,
-        visible ? 'translate-x-0 opacity-100' : 'translate-x-6 opacity-0'
+        'pointer-events-auto relative overflow-hidden rounded-xl border p-4 shadow-xl',
+        style.container
       )}
     >
       <div className="flex items-start gap-3">
@@ -113,24 +109,24 @@ function ToastCard({
 
         <div className="min-w-0 flex-1">
           {toast.title && (
-            <p className="text-sm font-semibold text-foreground">
+            <p className="text-sm font-semibold text-slate-900">
               {toast.title}
             </p>
           )}
-          <p className="text-sm text-muted-foreground">{toast.message}</p>
+          <p className="text-sm text-slate-600">{toast.message}</p>
         </div>
 
         <button
           type="button"
           onClick={() => onDismiss(toast.id)}
           aria-label="Close notification"
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted">
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-100">
         <div
           className={cn('h-full origin-left', style.bar)}
           style={{
@@ -144,6 +140,11 @@ function ToastCard({
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const dismiss = useCallback((id: string) => {
     setToasts((prev) => prev.filter((item) => item.id !== id));
@@ -162,7 +163,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       duration?: number;
     }) => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      setToasts((prev) => [...prev.slice(-3), { id, title, message, variant, duration }]);
+      setToasts((prev) => [
+        ...prev.slice(-3),
+        { id, title, message, variant, duration },
+      ]);
     },
     []
   );
@@ -188,17 +192,30 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [showToast]
   );
 
+  const toastContainer = (
+    <div
+      aria-label="Notifications"
+      style={{
+        position: 'fixed',
+        top: '1.25rem',
+        right: '1.25rem',
+        zIndex: 9999,
+        width: 'min(24rem, calc(100vw - 2rem))',
+      }}
+      className="pointer-events-none flex flex-col gap-2.5"
+    >
+      {toasts.map((toast) => (
+        <ToastCard key={toast.id} toast={toast} onDismiss={dismiss} />
+      ))}
+    </div>
+  );
+
   return (
     <ToastContext.Provider value={{ showToast, success, error, info }}>
       {children}
-      <div
-        aria-label="Notifications"
-        className="pointer-events-none fixed right-4 top-5 z-[100] flex w-[calc(100%-2rem)] max-w-sm flex-col gap-2.5 sm:right-6"
-      >
-        {toasts.map((toast) => (
-          <ToastCard key={toast.id} toast={toast} onDismiss={dismiss} />
-        ))}
-      </div>
+      {mounted && typeof document !== 'undefined'
+        ? createPortal(toastContainer, document.body)
+        : null}
     </ToastContext.Provider>
   );
 }
@@ -210,4 +227,3 @@ export function useToastContext(): ToastContextValue {
   }
   return context;
 }
-
